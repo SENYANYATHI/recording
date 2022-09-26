@@ -1,90 +1,128 @@
-import * as React from 'react';
-import { Text, View, StyleSheet, Button } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { Button, StyleSheet, Text, View } from 'react-native';
 import { Audio } from 'expo-av';
+import * as Sharing from 'expo-sharing';
 
 export default function App() {
   const [recording, setRecording] = React.useState();
-  const [time,setTime]= React.useState();
+  const [recordings, setRecordings] = React.useState([]);
+  const [message, setMessage] = React.useState("");
 
   async function startRecording() {
     try {
-      console.log('Requesting permissions..');
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      }); 
-      console.log('Starting recording..');
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-      await recording.startAsync(); 
-      setRecording(recording);
-      console.log('Recording started');
+      const permission = await Audio.requestPermissionsAsync();
+
+      if (permission.status === "granted") {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true
+        });
+        
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY
+        );
+
+        setRecording(recording);
+      } else {
+        setMessage("Please grant permission to app to access microphone");
+      }
     } catch (err) {
       console.error('Failed to start recording', err);
     }
   }
 
   async function stopRecording() {
-    console.log('Stopping recording..');
     setRecording(undefined);
     await recording.stopAndUnloadAsync();
-    const uri = recording.getURI(); 
-    console.log('Recording stopped and stored at', uri);
+
+    let updatedRecordings = [...recordings];
+    const { sound, status } = await recording.createNewLoadedSoundAsync();
+    updatedRecordings.push({
+      sound: sound,
+      duration: getDurationFormatted(status.durationMillis),
+      file: recording.getURI()
+    });
+
+    setRecordings(updatedRecordings);
+  }
+
+  function getDurationFormatted(millis) {
+    const minutes = millis / 1000 / 60;
+    const minutesDisplay = Math.floor(minutes);
+    const seconds = Math.round((minutes - minutesDisplay) * 60);
+    const secondsDisplay = seconds < 10 ? `0${seconds}` : seconds;
+    return `${minutesDisplay}:${secondsDisplay}`;
+    
+  }
+  console.log(recordings);
+
+  function getRecordingLines() {
+    return recordings.map((recordingLine, index) => {
+      return (
+        <View key={index} style={styles.row}>
+          <Text style={styles.fill}>Recording {index + 1} - {recordingLine.duration}</Text>
+          <Button style={styles.button} onPress={() => recordingLine.sound.replayAsync()} title="Play"></Button>
+          <br></br>
+          <br></br>
+          <Button style={styles.button} onPress={() => Sharing.shareAsync(recordingLine.file)} title="Share"></Button>
+        </View>
+      );
+    });
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>RECORDING APP</Text>
-      <Button 
-        title={recording ? 'Start Recording'  : 'Start Recording'}
-        onPress={recording ? startRecording : startRecording}
-       />
-       <Text style={styles.txt}>STOP THE RECORD</Text>
-            <Button 
-        title={recording ? 'Stop Recording'  : 'Stop Recording'}
-        onPress={recording ? stopRecording : stopRecording}
-      >stop</Button>
+      <Text style={styles.Text} >RECORDING APP</Text>
+      <Text>{message}</Text>
+      <Button
+        title={recording ? 'Start Recording' : 'Start Recording'}
+        onPress={recording ? startRecording : startRecording} />
+        <br></br>
+         <Button
+        title={recording ? 'Stop Recording' : 'Stop Recording'}
+        onPress={recording ? stopRecording : stopRecording} />
+      {getRecordingLines()}
+      <StatusBar style="auto" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#f8f8f8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius:10,
     borderRadius:'10 solid black',
     flex: 2,
     borderWidth:20,
     borderRadius:10,
-    borderColor:'yellow',borderWidth:5,
-    backgroundColor: 'skyblue',
+    borderColor:'black',borderWidth:5,
+    
+  },
+  Text:{
+    color:'black',
+    fontSize:60,
+    textTransform:'uppercase',
+    fontFamily:'Yatra-One',
+    fontStyle:'italic',
+    marginTop:100,
+    textAlign:'center',
+    backgroundColor:'#fffff0',
+  
+  },
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius:10,
-    maxWidth:641,
-    margin:'auto',
-    maxHeight:1061,
   },
-  text:{
-    fontFamily:'Yatra-One',
-    color:'#98111E',
-    fontSize:60,
-    fontWeight:'bold',
-    textTransform:'uppercase',
-    fontStyle:'italic',
-    justifyContent:'center',
-    marginBottom:100,
-    textAlign:'center',
-
+  fill: {
+    flex: 1,
+    margin: 16
   },
-txt:{
-  color:'#750000',
-  fontSize:20,
-  textTransform:'uppercase',
-  fontFamily:'Yatra-One',
-  fontStyle:'italic',
-  marginTop:100,
-  textAlign:'center',
-  backgroundColor:'#f8f8f8',
-}
-
+  button: {
+    margin: 16
+  }
 });
